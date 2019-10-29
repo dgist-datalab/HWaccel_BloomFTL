@@ -12,9 +12,10 @@
 `define PPB `B_SIZE/`P_SIZE // number of page comparators per block // 8
 `define NOP `ARR_SIZE/`P_SIZE // total number of pages // 24
 
-`define NOP_RANGE_SIZE 5 // integer which can store the range of page number 0~23 (5-bit can store 0~31 integer)
-`define NOB_RANGE_SIZE 2 // integer which can store the range of block number 0~2 (2-bit can store 0~3 integer)
-`define PPB_RANGE_SIZE 3 // integer which can store the range of block number 0~7 (3-bit can store 0~7 integer)
+`define NOP_WIDTH 5 // integer which can store the range of page number 0~23 (5-bit can store 0~31 integer)
+`define NOB_WIDTH 2 // integer which can store the range of block number 0~2 (2-bit can store 0~3 integer)
+`define PPB_WIDTH 3 // integer which can store the range of block number 0~7 (3-bit can store 0~7 integer)
+`define B_OFFSET_WIDTH 6 // integer which can store the range of block offset(in-block bit index) 0~40 (6-bit can store 0~63)
 /*
  * One comparator can compare one page with four page-size patterns
  * In one epoch, HW finds true pages which are equal to patterns in one block
@@ -30,13 +31,14 @@ module find_bit_pattern_tb;
   reg rst;
   reg [`ARR_SIZE-1:0] arr;
   reg [`P_SIZE-1:0] pattern1, pattern2, pattern3, pattern4;
-  reg [1:0] block_index;
+  reg [`NOB_WIDTH:0] block_index;
   reg put_global;
    
   // Outputs
-  reg [`NOP_RANGE_SIZE:0] global_tpn_arr [0:`NOP-1]; // array of global true page number
+  //reg [`NOP_WIDTH:0] global_tpn_arr [0:`NOP-1]; // array of global true page number
+  reg [`NOP_WIDTH*`NOP-1:0] global_tpn_arr; // array of global true page number
   
-  find_bit_pattern
+  find_bit_pattern f1
   (
     .g_tpn_arr(global_tpn_arr),
     .clk(clk),
@@ -84,6 +86,12 @@ module find_bit_pattern_tb;
       // TrueP :[ 1   1   1   1   1   1   1   1      0   0   1   0   1   0   0   1      0   0   0   1   1   0   0   0 ]
       // Expected Output(dec): [ 3 4 8 11 13 16 17 18 19 20 21 22 23 ]    
       // Expected Output(hex): [ 3 4 8 b  d  10 11 12 13 14 15 16 17 ]    
+      
+      /* Test Input 3 */
+      //arr = 288'h111_222_222_333_111_222_333_111____111_222_111_333_444_222_444_111____111_333_222_111_444_444_333_222 ;
+      // TrueP :[ 1   1   1   1   1   1   1   1      1   1   1   1   1   1   1   1      1   1   1   1   1   1   1   1 ]
+      // Expected Output(dec): [ 0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20 21 22 23 ]    
+      // Expected Output(hex): [ 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f  10 11 12 13 14 15 16 17 ]   
       
       //#20 
       

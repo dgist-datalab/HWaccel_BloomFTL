@@ -12,9 +12,10 @@
 `define PPB `B_SIZE/`P_SIZE // number of comparators per block // 8
 `define NOP `ARR_SIZE/`P_SIZE // total number of pages // 24
 
-`define NOP_RANGE_SIZE 5 // integer which can store the range of page number 0~23 (5-bit can store 0~31 integer)
-`define NOB_RANGE_SIZE 2 // integer which can store the range of block number 0~2 (2-bit can store 0~3 integer)
-`define PPB_RANGE_SIZE 3 // integer which can store the range of block number 0~7 (3-bit can store 0~7 integer)
+`define NOP_WIDTH 5 // integer which can store the range of page number 0~23 (5-bit can store 0~31 integer)
+`define NOB_WIDTH 2 // integer which can store the range of block number 0~2 (2-bit can store 0~3 integer)
+`define PPB_WIDTH 3 // integer which can store the range of block number 0~7 (3-bit can store 0~7 integer)
+`define B_OFS_WIDTH 6 // integer which can store the range of block offset(in-block bit index) 0~40 (6-bit can store 0~63)
 /*
  * One comparator can compare one page with four page-size patterns
  * In one epoch, HW finds true pages which are equal to patterns in one block
@@ -64,6 +65,7 @@ module comparator_page(eq, a, b1, b2, b3, b4);
   comparator_4bit fbc4_1(a[3:0], b4[3:0], eq4_0);
   comparator_4bit fbc4_2(a[7:4], b4[7:4], eq4_1);
   comparator_4bit fbc4_3(a[11:8], b4[11:8], eq4_2);
+  
   and a1(eq1, eq1_0, eq1_1, eq1_2);
   and a2(eq2, eq2_0, eq2_1, eq2_2);
   and a3(eq3, eq3_0, eq3_1, eq3_2);
@@ -71,15 +73,15 @@ module comparator_page(eq, a, b1, b2, b3, b4);
   
   or o1(eq, eq1, eq2, eq3, eq4);
 endmodule
-
-module comparator_block(tpn_arr, tpn_cnt, clk, rst, a_part, b_idx, x1, x2, x3, x4);
+  
+module comparator_block(tpn_arr, tpn_ofs, clk, rst, a_part, b_idx, x1, x2, x3, x4);
   input [`B_SIZE-1:0] a_part;
-  input [`P_SIZE:0] x1, x2, x3, x4;
-  input [`NOB_RANGE_SIZE:0] b_idx;
+  input [`P_SIZE-1:0] x1, x2, x3, x4;
+  input [`NOB_WIDTH:0] b_idx;
   input clk, rst;
   
-  output reg [`NOP_RANGE_SIZE:0] tpn_arr [0:`PPB-1]; // array of true page numbers in this block
-  output reg [`PPB_RANGE_SIZE:0] tpn_cnt; // # of true pages in this block
+  output reg [`NOP_WIDTH*`PPB - 1 : 0] tpn_arr; // array of true page numbers in this block
+  output reg [`B_OFS_WIDTH-1:0] tpn_ofs; // bit index(block offset) of true pages in this block // 0~40
   
   wire eq0, eq1, eq2, eq3, eq4, eq5, eq6, eq7;
   
@@ -93,33 +95,68 @@ module comparator_block(tpn_arr, tpn_cnt, clk, rst, a_part, b_idx, x1, x2, x3, x
   comparator_page p6(eq6, a_part[`P_SIZE*7-1:`P_SIZE*6], x1, x2, x3, x4);
   comparator_page p7(eq7, a_part[`P_SIZE*8-1:`P_SIZE*7], x1, x2, x3, x4);
   
+  reg [`NOP_WIDTH-1:0] global_tpn;
+  reg [2:0] i; // NOP_WIDTH_WIDTH (3-bit can store 0~4)
+  
   /* FIFO buffer: insert the numbers(index) of true pages into tpn_arr */
   always @ (posedge clk, negedge rst) begin
-    if (!rst) tpn_cnt = 0;
+    if (!rst) tpn_ofs = 0;
     else begin
-      tpn_cnt = 0;
-      if (eq0) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 0; tpn_cnt = tpn_cnt+1; end
-      if (eq1) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 1; tpn_cnt = tpn_cnt+1; end
-      if (eq2) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 2; tpn_cnt = tpn_cnt+1; end
-      if (eq3) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 3; tpn_cnt = tpn_cnt+1; end
-      if (eq4) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 4; tpn_cnt = tpn_cnt+1; end
-      if (eq5) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 5; tpn_cnt = tpn_cnt+1; end
-      if (eq6) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 6; tpn_cnt = tpn_cnt+1; end
-      if (eq7) begin tpn_arr[tpn_cnt] = b_idx*`PPB + 7; tpn_cnt = tpn_cnt+1; end
+      tpn_ofs = 0;
+      if (eq0) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+0; 
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq1) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+1;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq2) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+2;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq3) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+3;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq4) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+4;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq5) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+5;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq6) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+6;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
+      if (eq7) begin
+        global_tpn[`NOP_WIDTH-1:0] = b_idx*`PPB+7;
+        for (i=0; i<`NOP_WIDTH; i=i+1) begin tpn_arr[tpn_ofs+i] = global_tpn[i]; end
+        tpn_ofs = tpn_ofs+`NOP_WIDTH;
+      end
     end
   end
   
 endmodule
   
-  
 module find_bit_pattern(g_tpn_arr, clk, rst, b_idx, a, x1, x2, x3, x4, put_global_array);
   input clk, rst;
   input [`ARR_SIZE-1:0] a; // input vector
   input [`P_SIZE-1:0] x1, x2, x3, x4; // 4 patterns to compare
-  input [`NOB_RANGE_SIZE:0] b_idx; // block index
+  input [`NOB_WIDTH:0] b_idx; // block index
   input put_global_array;
   
-  output reg [`NOP_RANGE_SIZE:0] g_tpn_arr [0:`NOP-1]; // global(main) array of true page numbers(indices)
+  output reg [`NOP_WIDTH*`NOP-1:0] g_tpn_arr; // global(main) array of true page numbers(indices)
+  // 4:0 5-bit x 24 -> 119:0 (5*24-1)
   
   reg [`B_SIZE-1:0] a_part; // block-unit part of input vector
   
@@ -134,104 +171,52 @@ module find_bit_pattern(g_tpn_arr, clk, rst, b_idx, a, x1, x2, x3, x4, put_globa
     end
   end
   
-  
-  reg [`NOP_RANGE_SIZE:0] out_tpn_arr [0:`PPB-1]; // array of true page numbers in one block
-  wire [`PPB_RANGE_SIZE:0] out_tpn_cnt; // # of true pages in one block
+  reg [`NOP_WIDTH*`PPB-1 : 0] out_tpn_arr; // array of true page numbers in this block
+  reg [`B_OFS_WIDTH-1:0] out_tpn_ofs; // bit index(block offset) of true pages in one block // 0~40
   
   /* Pattern Check in 1 epoch(block) */
-  comparator_block b0(out_tpn_arr, out_tpn_cnt, clk, rst, a_part, b_idx, x1, x2, x3, x4);
+  comparator_block b0(out_tpn_arr, out_tpn_ofs, clk, rst, a_part, b_idx, x1, x2, x3, x4);
   
-  reg [`NOP_RANGE_SIZE:0] g_tpn_cnt;
-  
+  reg [`NOP_WIDTH*`NOP-1:0] g_tpn_ofs; // bit index(offset) of global tpn array
+  // 4:0 5-bit x 24 -> 119:0 (5*24-1)
+ 
   /* FIFO buffer: insert the output of comparator_block(out_tpn_arr) into g_tpn_arr. g_tpn_arr will have the numbers(indices) of all true pages */
+  reg [5:0] i; // `B_OFS_WIDTH_WIDTH: 6-bit can store 0~40 integer
   always @ (posedge put_global_array, negedge rst) begin
-    if (!rst)  begin g_tpn_cnt <= 0; end
+    if (!rst)  begin g_tpn_ofs <= 0; end
     else begin
-      case (out_tpn_cnt) // 0 ~ 8(=PPB)
-        0: begin g_tpn_cnt = g_tpn_cnt; end
-        1: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_cnt = g_tpn_cnt+1; end
-        2: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_cnt = g_tpn_cnt+2; end
-        3: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_cnt = g_tpn_cnt+3; end
-        4: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_arr[g_tpn_cnt+3] = out_tpn_arr[3]; 
-          g_tpn_cnt = g_tpn_cnt+4; end
-        5: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_arr[g_tpn_cnt+3] = out_tpn_arr[3]; 
-          g_tpn_arr[g_tpn_cnt+4] = out_tpn_arr[4]; 
-          g_tpn_cnt = g_tpn_cnt+5; end
-        6: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_arr[g_tpn_cnt+3] = out_tpn_arr[3]; 
-          g_tpn_arr[g_tpn_cnt+4] = out_tpn_arr[4]; 
-          g_tpn_arr[g_tpn_cnt+5] = out_tpn_arr[5]; 
-          g_tpn_cnt = g_tpn_cnt+6; end
-        7: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_arr[g_tpn_cnt+3] = out_tpn_arr[3]; 
-          g_tpn_arr[g_tpn_cnt+4] = out_tpn_arr[4]; 
-          g_tpn_arr[g_tpn_cnt+5] = out_tpn_arr[5]; 
-          g_tpn_arr[g_tpn_cnt+6] = out_tpn_arr[6]; 
-          g_tpn_cnt = g_tpn_cnt+7; end
-        8: begin 
-          g_tpn_arr[g_tpn_cnt] = out_tpn_arr[0]; 
-          g_tpn_arr[g_tpn_cnt+1] = out_tpn_arr[1]; 
-          g_tpn_arr[g_tpn_cnt+2] = out_tpn_arr[2]; 
-          g_tpn_arr[g_tpn_cnt+3] = out_tpn_arr[3]; 
-          g_tpn_arr[g_tpn_cnt+4] = out_tpn_arr[4]; 
-          g_tpn_arr[g_tpn_cnt+5] = out_tpn_arr[5]; 
-          g_tpn_arr[g_tpn_cnt+6] = out_tpn_arr[6]; 
-          g_tpn_arr[g_tpn_cnt+7] = out_tpn_arr[7]; 
-          g_tpn_cnt = g_tpn_cnt+8; end
-      endcase
+      for (i=0; i<out_tpn_ofs; i=i+1) begin
+        g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i];
+      end
+      g_tpn_ofs = g_tpn_ofs + out_tpn_ofs;
     end
   end
   
-  
   /* Check whether the output is correct. It is not necessary in actual work. */
-  reg [`NOP_RANGE_SIZE:0] ret0, ret1, ret2, ret3, ret4, ret5, ret6, ret7, ret8, ret9, ret10, ret11;
-  reg [`NOP_RANGE_SIZE:0] ret12, ret13, ret14, ret15, ret16, ret17, ret18, ret19, ret20, ret21, ret22, ret23;
-    assign ret0 = g_tpn_arr[0];
-    assign ret1 = g_tpn_arr[1];
-    assign ret2 = g_tpn_arr[2];
-    assign ret3 = g_tpn_arr[3];
-    assign ret4 = g_tpn_arr[4];
-    assign ret5 = g_tpn_arr[5];
-    assign ret6 = g_tpn_arr[6];
-    assign ret7 = g_tpn_arr[7];
-    assign ret8 = g_tpn_arr[8];
-    assign ret9 = g_tpn_arr[9];
-    assign ret10 = g_tpn_arr[10];
-    assign ret11 = g_tpn_arr[11];
-    assign ret12 = g_tpn_arr[12];
-    assign ret13 = g_tpn_arr[13];
-    assign ret14 = g_tpn_arr[14];
-    assign ret15 = g_tpn_arr[15];
-    assign ret16 = g_tpn_arr[16];
-    assign ret17 = g_tpn_arr[17];
-    assign ret18 = g_tpn_arr[18];
-    assign ret19 = g_tpn_arr[19];
-    assign ret20 = g_tpn_arr[20];
-    assign ret21 = g_tpn_arr[21];
-    assign ret22 = g_tpn_arr[22];
-    assign ret23 = g_tpn_arr[23];
-      
+  reg [`NOP_WIDTH-1:0] ret0, ret1, ret2, ret3, ret4, ret5, ret6, ret7, ret8, ret9, ret10, ret11;
+  reg [`NOP_WIDTH-1:0] ret12, ret13, ret14, ret15, ret16, ret17, ret18, ret19, ret20, ret21, ret22, ret23;
+  assign ret0[4:0] = g_tpn_arr[5*1-1:5*0];
+  assign ret1[4:0] = g_tpn_arr[5*2-1:5*1];
+  assign ret2[4:0] = g_tpn_arr[5*3-1:5*2];
+  assign ret3[4:0] = g_tpn_arr[5*4-1:5*3];
+  assign ret4[4:0] = g_tpn_arr[5*5-1:5*4];
+  assign ret5[4:0] = g_tpn_arr[5*6-1:5*5];
+  assign ret6[4:0] = g_tpn_arr[5*7-1:5*6];
+  assign ret7[4:0] = g_tpn_arr[5*8-1:5*7];
+  assign ret8[4:0] = g_tpn_arr[5*9-1:5*8];
+  assign ret9[4:0] = g_tpn_arr[5*10-1:5*9];
+  assign ret10[4:0] = g_tpn_arr[5*11-1:5*10];
+  assign ret11[4:0] = g_tpn_arr[5*12-1:5*11];
+  assign ret12[4:0] = g_tpn_arr[5*13-1:5*12];
+  assign ret13[4:0] = g_tpn_arr[5*14-1:5*13];
+  assign ret14[4:0] = g_tpn_arr[5*15-1:5*14];
+  assign ret15[4:0] = g_tpn_arr[5*16-1:5*15];
+  assign ret16[4:0] = g_tpn_arr[5*17-1:5*16];
+  assign ret17[4:0] = g_tpn_arr[5*18-1:5*17];
+  assign ret18[4:0] = g_tpn_arr[5*19-1:5*18];
+  assign ret19[4:0] = g_tpn_arr[5*20-1:5*19];
+  assign ret20[4:0] = g_tpn_arr[5*21-1:5*20];
+  assign ret21[4:0] = g_tpn_arr[5*22-1:5*21];
+  assign ret22[4:0] = g_tpn_arr[5*23-1:5*22];
+  assign ret23[4:0] = g_tpn_arr[5*24-1:5*23];
 endmodule
