@@ -44,10 +44,10 @@ module comparator_page(eq, a, b1, b2, b3, b4);
   input [`P_SIZE-1:0]b1, b2, b3, b4;
   output eq;
   
-  wire eq1_0, eq1_1, eq1_2;
-  wire eq2_0, eq2_1, eq2_2;
-  wire eq3_0, eq3_1, eq3_2;
-  wire eq4_0, eq4_1, eq4_2;
+  wire eq1, eq1_0, eq1_1, eq1_2;
+  wire eq2, eq2_0, eq2_1, eq2_2;
+  wire eq3, eq3_0, eq3_1, eq3_2;
+  wire eq4, eq4_0, eq4_1, eq4_2;
   
   /* compare page(12-bits) with 4 inputs(patterns) */
   comparator_4bit fbc1_1(a[3:0], b1[3:0], eq1_0);
@@ -100,7 +100,7 @@ module comparator_block(tpn_arr, tpn_ofs, clk, rst, a_part, b_idx, x1, x2, x3, x
   
   /* FIFO buffer: insert the numbers(index) of true pages into tpn_arr */
   always @ (posedge clk, negedge rst) begin
-    if (!rst) tpn_ofs = 0;
+    if (!rst) begin global_tpn <= 0; tpn_arr <= 0; tpn_ofs <= 0; end
     else begin
       tpn_ofs = 0;
       if (eq0) begin
@@ -161,7 +161,7 @@ module find_bit_pattern(g_tpn_arr, clk, rst, b_idx, a, x1, x2, x3, x4, put_globa
   reg [`B_SIZE-1:0] a_part; // block-unit part of input vector
   
   always @ (posedge clk, negedge rst) begin
-    if (!rst) g_tpn_arr[0] <= 0;
+    if (!rst) begin a_part <= 0; end
     else begin 
       case (b_idx)
         2'd0: begin a_part[`B_SIZE-1:0] <= a[`B_SIZE*1-1 : `B_SIZE*0]; end
@@ -183,7 +183,7 @@ module find_bit_pattern(g_tpn_arr, clk, rst, b_idx, a, x1, x2, x3, x4, put_globa
   /* FIFO buffer: insert the output of comparator_block(out_tpn_arr) into g_tpn_arr. g_tpn_arr will have the numbers(indices) of all true pages */
   reg [5:0] i; // `B_OFS_WIDTH_WIDTH: 6-bit can store 0~40 integer
   always @ (posedge put_global_array, negedge rst) begin
-    if (!rst)  begin g_tpn_ofs <= 0; end
+    if (!rst)  begin g_tpn_arr <= 0; g_tpn_ofs <= 0; end
     else begin
       for (i=0; i<out_tpn_ofs; i=i+1) begin
         g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i];

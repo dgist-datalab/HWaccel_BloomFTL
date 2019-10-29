@@ -62,7 +62,7 @@ module find_bit_pattern_tb;
   initial
     begin
       $dumpfile("find_bit_pattern.vcd");
-      $dumpvars(2,find_bit_pattern);
+      $dumpvars(2,f1);
       // Initialize Inputs
       clk = 1'b0;
       rst = 1'b0;
