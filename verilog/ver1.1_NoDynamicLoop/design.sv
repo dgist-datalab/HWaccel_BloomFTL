@@ -192,21 +192,21 @@ module find_bit_pattern(g_tpn_arr, clk, rst, b_idx, a, x1, x2, x3, x4, put_globa
        * 즉, 한 epoch(block)에서는 대부분 0개에 가끔 1개, 매우 드물게 2개까지 나오는 셈
        */
       if (out_tpn_ofs != 0) begin
-        if (out_tpn_ofs <= 120'd5) begin 
+        if (out_tpn_ofs <= 6'd5) begin 
           for (i=0; i<5; i=i+1) begin g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i]; end
           g_tpn_ofs = g_tpn_ofs + out_tpn_ofs;
         end
-        else if (out_tpn_ofs <= 120'd10) begin
+        else if (out_tpn_ofs <= 6'd10) begin
           for (i=0; i<10; i=i+1) begin g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i]; end
           g_tpn_ofs = g_tpn_ofs + out_tpn_ofs;
         end
         
         /* 실제 test case에서는 최대 true page 개수가 2개이므로 이 이후는 사실상 수행되지 않는다 */
-        else if (out_tpn_ofs <= 120'd15) begin
+        else if (out_tpn_ofs <= 6'd15) begin
           for (i=0; i<15; i=i+1) begin g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i]; end
           g_tpn_ofs = g_tpn_ofs + out_tpn_ofs;
         end
-        else if (out_tpn_ofs <= 120'd40) begin
+        else if (out_tpn_ofs <= 6'd40) begin
           for (i=0; i<40; i=i+1) begin g_tpn_arr[g_tpn_ofs+i] = out_tpn_arr[i]; end
           g_tpn_ofs = g_tpn_ofs + out_tpn_ofs;
         end
